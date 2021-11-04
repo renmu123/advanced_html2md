@@ -1,89 +1,93 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-
+import {
+	App,
+	Editor,
+	MarkdownView,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+} from "obsidian";
+const TurndownService = require("turndown");
+const turndownPluginGfm = require("turndown-plugin-gfm");
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
-	mySetting: string;
+	github: boolean;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+	github: true,
+};
 
-export default class MyPlugin extends Plugin {
+export default class advancedPastePlugin extends Plugin {
 	settings: MyPluginSettings;
 
 	async onload() {
 		await this.loadSettings();
+		this.addSettingTab(new advancedPastePluginSettingTab(this.app, this));
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		const turndownService = await this.init();
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+			id: "paste",
+			name: "paste",
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				const text = await this.getClipboardContents();
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+				const markdown = turndownService.turndown(text);
+				editor.replaceSelection(markdown);
+			},
+		});
+	}
+	async getClipboardContents() {
+		try {
+			const clipboardItems = await navigator.clipboard.read();
+			let value;
+
+			for (const clipboardItem of clipboardItems) {
+				console.log(clipboardItem.types);
+				const types = clipboardItem.types;
+				if (types.includes("text/html")) {
+					const blob = await clipboardItem.getType("text/html");
+					value = await blob.text();
+				} else {
+					const blob = await clipboardItem.getType("text/plain");
+					value = await blob.text();
 				}
 			}
+			return value;
+		} catch (err) {
+			console.error(err.name, err.message);
+		}
+	}
+	async init() {
+		const turndownService = new TurndownService({
+			headingStyle: "atx",
+			bulletListMarker: "-",
+			emDelimiter: "*",
+			codeBlockStyle: "fenced",
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
+		if (this.settings.github) {
+			const gfm = turndownPluginGfm.gfm;
+			turndownService.use(gfm);
+		}
+		turndownService.addRule("strikethrough", {
+			filter: ["del", "s", "strike"],
+			replacement: function (content: any) {
+				return "~~" + content + "~~";
+			},
 		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		return turndownService;
 	}
 
-	onunload() {
-
-	}
+	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
@@ -91,47 +95,34 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class advancedPastePluginSettingTab extends PluginSettingTab {
+	plugin: advancedPastePlugin;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: advancedPastePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
+		containerEl.createEl("h2", { text: "Settings" });
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName(
+				"github suport (You should reload the plugin to make the setting effect.)"
+			)
+			.setDesc("strikethrough,tables,taskListItems support")
+			.addToggle((value) =>
+				value
+					.setValue(this.plugin.settings.github)
+					.onChange(async (value) => {
+						console.log("Secret: " + value);
+						this.plugin.settings.github = value;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
