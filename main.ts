@@ -44,7 +44,6 @@ export default class advancedPastePlugin extends Plugin {
 			let value;
 
 			for (const clipboardItem of clipboardItems) {
-				console.log(clipboardItem.types);
 				const types = clipboardItem.types;
 				if (types.includes("text/html")) {
 					const blob = await clipboardItem.getType("text/html");
@@ -119,7 +118,6 @@ class advancedPastePluginSettingTab extends PluginSettingTab {
 				value
 					.setValue(this.plugin.settings.github)
 					.onChange(async (value) => {
-						console.log("Secret: " + value);
 						this.plugin.settings.github = value;
 						await this.plugin.saveSettings();
 					})
